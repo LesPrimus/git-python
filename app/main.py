@@ -1,19 +1,18 @@
-from argparse import ArgumentParser
-
 from app.models import Git
-
-
-def get_args():
-    parser = ArgumentParser()
-    parser.add_argument("command")
-    return parser.parse_args()
-
+from app.utils import get_parser
 
 
 def main():
-    args = get_args()
     git = Git()
-    git.parse_command(args.command)
+    parser = get_parser()
+    args = parser.parse_args()
+    match args.command:
+        case "init":
+            return git.init_repo()
+        case "cat-file":
+            return git.cat_file(args.hash, pretty_print=args.pretty_print)
+        case _:
+            raise RuntimeError(f"Unknown command #{args.command}")
 
 
 if __name__ == "__main__":

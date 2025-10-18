@@ -1,6 +1,11 @@
 import pathlib
+import sys
+import zlib
 
 __all__ = ["Git"]
+
+NULL_BYTE = b"\x00"
+
 
 class Git:
     @classmethod
@@ -14,9 +19,14 @@ class Git:
             f.write("ref: refs/heads/main\n")
         return
 
-    def parse_command(self, command):
-        match command:
-            case "init":
-                return self.init_repo()
-            case _:
-                raise RuntimeError(f"Unknown command #{command}")
+    @classmethod
+    def cat_file(cls, hash_: str, *, pretty_print: bool = False):
+        from app.models import Blob
+
+        path = pathlib.Path(".git", "objects", hash_[:2], hash_[2:])
+        with path.open("rb") as f:
+            data = zlib.decompress(f.read())
+        header, _, body = data.partition(NULL_BYTE)
+        if pretty_print:
+            sys.stdout.write(body.decode())
+        return Blob(header=header, body=body)
