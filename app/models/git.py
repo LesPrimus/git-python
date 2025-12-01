@@ -4,6 +4,8 @@ import zlib
 
 __all__ = ["Git"]
 
+from app.utils import create_blob
+
 NULL_BYTE = b"\x00"
 
 
@@ -30,3 +32,9 @@ class Git:
         if pretty_print:
             sys.stdout.write(body.decode())
         return Blob(header=header, body=body)
+
+    @classmethod
+    def hash_object(cls, path: pathlib.Path, *, write: bool = False):
+        with path.open("r") as f:
+            hash_value = create_blob(f.read(), write=write)
+        return hash_value

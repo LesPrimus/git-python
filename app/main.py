@@ -11,6 +11,8 @@ def main():
             return git.init_repo()
         case "cat-file":
             return git.cat_file(args.hash, pretty_print=args.pretty_print)
+        case "hash-object":
+            return git.hash_object(args.path, write=args.write)
         case _:
             raise RuntimeError(f"Unknown command #{args.command}")
 

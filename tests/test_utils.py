@@ -1,3 +1,4 @@
+import pathlib
 from argparse import Namespace
 
 import pytest
@@ -16,6 +17,18 @@ from app.main import get_parser
         (
             ["cat-file", "-p", "some_hash"],
             Namespace(command="cat-file", hash="some_hash", pretty_print=True),
+        ),
+        (
+            ["hash-object", "some_file.txt"],
+            Namespace(
+                command="hash-object", path=pathlib.Path("some_file.txt"), write=False
+            ),
+        ),
+        (
+            ["hash-object", "-w", "some_file.txt"],
+            Namespace(
+                command="hash-object", path=pathlib.Path("some_file.txt"), write=True
+            ),
         ),
     ],
 )
