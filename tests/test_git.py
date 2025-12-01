@@ -35,7 +35,7 @@ class TestGit:
         "content, expected_hash_value",
         [("hello world\n", "3b18e512dba79e4c8300dd08aeb37f8e728b8dad")],
     )
-    def test_hash_object(self, change_to_tmp_dir, content, expected_hash_value, write):
+    def test_hash_object(self, change_to_tmp_dir, content, expected_hash_value, write, capsys):
         git = Git()
         git.init_repo()
         tmp_file = change_to_tmp_dir / "file.txt"
@@ -47,3 +47,4 @@ class TestGit:
             change_to_tmp_dir / ".git/objects" / hash_value[:2] / hash_value[2:]
         )
         assert expected_path.exists() == write
+        assert capsys.readouterr().out == hash_value

@@ -34,7 +34,9 @@ class Git:
         return Blob(header=header, body=body)
 
     @classmethod
-    def hash_object(cls, path: pathlib.Path, *, write: bool = False):
+    def hash_object(cls, path: pathlib.Path, *, write: bool = False, pretty_print: bool = True):
         with path.open("r") as f:
             hash_value = create_blob(f.read(), write=write)
+        if pretty_print:
+            sys.stdout.write(hash_value)
         return hash_value
