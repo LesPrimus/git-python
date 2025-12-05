@@ -30,6 +30,18 @@ from app.main import get_parser
                 command="hash-object", path=pathlib.Path("some_file.txt"), write=True
             ),
         ),
+        (
+            ["ls-tree", "some_hash"],
+            Namespace(command="ls-tree", name_only=False, hash_value="some_hash"),
+        ),
+        (
+            [
+                "ls-tree",
+                "--name-only",
+                "some_hash",
+            ],
+            Namespace(command="ls-tree", name_only=True, hash_value="some_hash"),
+        ),
     ],
 )
 def test_parser(params, expected):
