@@ -9,6 +9,8 @@ __all__ = ["Git"]
 from os import PathLike
 from typing import Protocol
 
+from app.utils import chdir
+
 NULL_BYTE = b"\x00"
 
 
@@ -78,12 +80,6 @@ class Git:
             sys.stdout.write(hash_value)
         return hash_value
 
-    def ls_tree(self, hash_value: str, *, name_only: bool = False):
-        path = self.objects_folder / hash_value[:2] / hash_value[2:]
-        with path.open("rb") as f:
-            data = zlib.decompress(f.read())
-        raise NotImplementedError
-
     def write_tree(self, directory=".") -> str:
         entries = []
         dir_path = pathlib.Path(directory)
@@ -105,7 +101,9 @@ class Git:
                 hash_value = self.write_tree(entry)
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
-                entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
+                entries.append(
+                    f"{mode} tree {entry.name}".encode() + b"\0" + hash_binary
+                )
 
         # Combine all entries into a single tree object
         tree_content = b"".join(entries)
@@ -116,3 +114,28 @@ class Git:
         tree_hash = self.create_hash(tree_store)
         self.save_file(tree_hash, tree_store)
         return tree_hash
+
+    def ls_tree(self, hash_value: str, *, name_only: bool = False):
+        # Read and decompress the tree object
+        entries = []
+
+        dir_name = self.objects_folder / hash_value[:2]
+        with chdir(dir_name):
+            file_name = pathlib.Path(hash_value[2:])
+            with file_name.open("rb") as f:
+                data = zlib.decompress(f.read())
+
+        header, _, tree_data = data.partition(NULL_BYTE)
+        kind, data_len = header.decode().split()
+        entry_data, _, raw_hash = tree_data.partition(NULL_BYTE)
+        mode, entry_kind, name = entry_data.split()
+        hash_value = binascii.hexlify(raw_hash).decode()
+
+        entry = {
+            "mode": mode.decode(),
+            "type": entry_kind.decode(),
+            "name": name.decode(),
+            "hash": hash_value,
+        }
+        entries.append(entry)
+        return entry

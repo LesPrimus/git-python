@@ -1,3 +1,5 @@
+import contextlib
+import os
 import pathlib
 from argparse import ArgumentParser
 
@@ -29,3 +31,13 @@ def get_parser():
     ls_tree_parser.add_argument("hash_value")
 
     return parser
+
+
+@contextlib.contextmanager
+def chdir(path):
+    old_path = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(old_path)
