@@ -65,4 +65,6 @@ class TestGit:
         file2.write_text("World")
         #
         hash_values = git.write_tree()
-        assert 0, "Finish writing tree"
+
+        git.ls_tree(hash_values, name_only=True)
+        assert 0

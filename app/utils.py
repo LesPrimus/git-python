@@ -1,5 +1,4 @@
 import pathlib
-import zlib
 from argparse import ArgumentParser
 
 

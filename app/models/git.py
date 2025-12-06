@@ -1,8 +1,13 @@
+import binascii
+import hashlib
 import pathlib
 import sys
 import zlib
 
 __all__ = ["Git"]
+
+from os import PathLike
+from typing import Protocol
 
 NULL_BYTE = b"\x00"
 
@@ -36,26 +41,32 @@ class Git:
             sys.stdout.write(body.decode())
         return Blob(header=header, body=body)
 
-    def create_blob(self, content: str, *, write: bool = True) -> str:
-        # Format the blob object
-        blob = f"blob {len(content)}\0{content}"
-        # Convert to bytes
-        blob_bytes = blob.encode()
-        # Compress using zlib
-        compressed = zlib.compress(blob_bytes)
+    @staticmethod
+    def compress(data: bytes, *, compressor=zlib.compress) -> bytes:
+        return compressor(data)
 
-        # Calculate SHA-1 hash
-        import hashlib
-
-        hash_object = hashlib.sha1(blob_bytes)
+    @staticmethod
+    def create_hash(data: str | bytes, *, hasher=hashlib.sha1) -> str:
+        if isinstance(data, str):
+            data = data.encode()
+        hash_object = hasher(data)
         hash_value = hash_object.hexdigest()
+        return hash_value
 
+    def save_file(self, hash_value, data: bytes):
+        path = self.objects_folder / hash_value[:2]
+        path.mkdir(exist_ok=True)
+
+        compressed_data = self.compress(data)
+        with (path / hash_value[2:]).open("wb") as f:
+            f.write(compressed_data)
+        return hash_value
+
+    def create_blob(self, content: str, *, write: bool = True) -> str:
+        blob = f"blob {len(content)}\0{content}"
+        hash_value = self.create_hash(blob)
         if write:
-            path = self.objects_folder / hash_value[:2]
-            path.mkdir(exist_ok=True)
-
-            with (path / hash_value[2:]).open("wb") as f:
-                f.write(compressed)
+            self.save_file(hash_value, blob.encode())
         return hash_value
 
     def hash_object(
@@ -67,20 +78,41 @@ class Git:
             sys.stdout.write(hash_value)
         return hash_value
 
-    @classmethod
-    def ls_tree(cls, hash_value: str, *, name_only: bool = False):
+    def ls_tree(self, hash_value: str, *, name_only: bool = False):
+        path = self.objects_folder / hash_value[:2] / hash_value[2:]
+        with path.open("rb") as f:
+            data = zlib.decompress(f.read())
         raise NotImplementedError
 
-    def write_tree(self, working_directory: pathlib.Path = None):
-        working_directory = working_directory or pathlib.Path(".")
-        hash_values = []
+    def write_tree(self, directory=".") -> str:
+        entries = []
+        dir_path = pathlib.Path(directory)
 
-        for path in working_directory.iterdir():
-            if path.name in self.ignore_patterns:
+        for entry in sorted(dir_path.iterdir()):
+            if entry.name.startswith(".git"):
                 continue
-            if path.is_dir():
-                hash_values.extend(self.write_tree(path))
-            if path.is_file():
-                hash_values.append(self.hash_object(path))
 
-        return hash_values
+            if entry.is_file():
+                mode = "100644"  # Regular file mode
+                hash_value = self.hash_object(entry, write=True, pretty_print=False)
+                # Convert hex string to binary
+                hash_binary = binascii.unhexlify(hash_value)
+                entries.append(
+                    f"{mode} blob {entry.name}".encode() + b"\0" + hash_binary
+                )
+            elif entry.is_dir():
+                mode = "040000"  # Directory mode
+                hash_value = self.write_tree(entry)
+                # Convert hex string to binary
+                hash_binary = binascii.unhexlify(hash_value)
+                entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
+
+        # Combine all entries into a single tree object
+        tree_content = b"".join(entries)
+        tree_header = f"tree {len(tree_content)}".encode()
+        tree_store = tree_header + b"\0" + tree_content
+
+        # Hash and store the tree object
+        tree_hash = self.create_hash(tree_store)
+        self.save_file(tree_hash, tree_store)
+        return tree_hash
