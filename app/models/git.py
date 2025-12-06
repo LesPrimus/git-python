@@ -9,7 +9,6 @@ __all__ = ["Git"]
 
 from os import PathLike
 
-from app.utils import chdir
 
 NULL_BYTE = b"\x00"
 
@@ -121,17 +120,13 @@ class Git:
                 )
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
-                entries.append(
-                    f"{mode} blob {entry.name}".encode() + b"\0" + hash_binary
-                )
+                entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
             elif entry.is_dir():
                 mode = GitObject.TREE.mode  # Directory mode
                 hash_value = self.create_tree(entry, write=write)
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
-                entries.append(
-                    f"{mode} tree {entry.name}".encode() + b"\0" + hash_binary
-                )
+                entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
 
         # Combine all entries into a single tree object
         tree_content = b"".join(entries)
@@ -153,7 +148,6 @@ class Git:
         header, _, content = data.partition(b"\0")
         if not header.startswith(b"tree "):
             raise ValueError(f"Not a tree object: {header}")
-
         # 3. Parse entries
         entries = []
         pos = 0
