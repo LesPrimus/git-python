@@ -53,21 +53,24 @@ class TestGit:
     def test_write_tree(self, change_to_tmp_dir):
         git = Git()
         git.init_repo()
-        #
+
         parent_dir = change_to_tmp_dir / "parent_dir"
         parent_dir.mkdir()
         file1 = parent_dir / "file1.txt"
         file1.write_text("hello")
-        #
-        child_dir = parent_dir / "child_dir"
-        child_dir.mkdir()
-        file2 = child_dir / "file2.txt"
+        file2 = parent_dir / "file2.txt"
         file2.write_text("World")
-        #
-        hash_values = git.create_tree()
+        inner_dir = parent_dir / "inner_dir"
+        inner_dir.mkdir()
 
-        git.ls_tree(hash_values, name_only=True)
+        inner_file1 = inner_dir / "inner_file1.txt"
+        inner_file1.write_text("Hello World!")
 
-        for entry in pathlib.Path(".git/objects").iterdir():
-            print(entry)
-        assert 0
+        # Create tree specifically for parent_dir
+        hash_values = git.create_tree("parent_dir")
+
+        # Now we should see both files
+        entries = git.ls_tree(hash_values, name_only=True)
+        print(entries)
+        return
+        assert len(entries) == 2

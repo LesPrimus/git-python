@@ -13,6 +13,8 @@ def main():
             return git.cat_file(args.hash, pretty_print=args.pretty_print)
         case "hash-object":
             return git.hash_object(args.path, write=args.write)
+        case "ls-tree":
+            return git.ls_tree(args.hash_value, name_only=args.name_only)
         case _:
             raise RuntimeError(f"Unknown command #{args.command}")
 

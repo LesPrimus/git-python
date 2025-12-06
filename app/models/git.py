@@ -15,8 +15,8 @@ NULL_BYTE = b"\x00"
 
 
 class GitObject(StrEnum):
-    BLOB = "blob"
-    TREE = "tree"
+    BLOB = auto()
+    TREE = auto()
 
     @property
     def mode(self):
@@ -145,26 +145,38 @@ class Git:
         return tree_hash
 
     def ls_tree(self, hash_value: str, *, name_only: bool = False):
-        # Read and decompress the tree object
+        object_path = self.objects_folder / hash_value[:2] / hash_value[2:]
+        with object_path.open("rb") as f:
+            data = zlib.decompress(f.read())
+
+        # 2. Split header from content
+        header, _, content = data.partition(b"\0")
+        if not header.startswith(b"tree "):
+            raise ValueError(f"Not a tree object: {header}")
+
+        # 3. Parse entries
         entries = []
+        pos = 0
+        while pos < len(content):
+            # Find the null byte that separates entry info from hash
+            null_pos = content.index(b"\0", pos)
 
-        dir_name = self.objects_folder / hash_value[:2]
-        with chdir(dir_name):
-            file_name = pathlib.Path(hash_value[2:])
-            with file_name.open("rb") as f:
-                data = zlib.decompress(f.read())
+            # Parse entry text (contains mode, type, and name)
+            entry_text = content[pos:null_pos].decode()
+            mode, name = entry_text.split(" ")
 
-        header, _, tree_data = data.partition(NULL_BYTE)
-        kind, data_len = header.decode().split()
-        entry_data, _, raw_hash = tree_data.partition(NULL_BYTE)
-        mode, entry_kind, name = entry_data.split()
-        hash_value = binascii.hexlify(raw_hash).decode()
+            # Extract 20-byte hash and convert to hex
+            hash_start = null_pos + 1
+            hash_end = hash_start + 20  # SHA-1 hash is 20 bytes
+            hash_bytes = content[hash_start:hash_end]
+            hash_hex = binascii.hexlify(hash_bytes).decode()
 
-        entry = {
-            "mode": mode.decode(),
-            "type": entry_kind.decode(),
-            "name": name.decode(),
-            "hash": hash_value,
-        }
-        entries.append(entry)
-        return entry
+            # Add entry to list
+            entries.append({"mode": mode, "name": name, "hash": hash_hex})
+
+            # Move to next entry
+            pos = hash_end
+        if name_only:
+            for entry in entries:
+                print(entry["name"])
+        return entries
