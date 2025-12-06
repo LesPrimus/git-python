@@ -3,15 +3,30 @@ import hashlib
 import pathlib
 import sys
 import zlib
+from enum import StrEnum, auto
 
 __all__ = ["Git"]
 
 from os import PathLike
-from typing import Protocol
 
 from app.utils import chdir
 
 NULL_BYTE = b"\x00"
+
+
+class GitObject(StrEnum):
+    BLOB = "blob"
+    TREE = "tree"
+
+    @property
+    def mode(self):
+        match self:
+            case GitObject.BLOB:
+                return "100644"
+            case GitObject.TREE:
+                return "040000"
+            case _:
+                raise ValueError(f"Invalid GitObject: {self}")
 
 
 class Git:
@@ -72,33 +87,46 @@ class Git:
         return hash_value
 
     def hash_object(
-        self, path: pathlib.Path, *, write: bool = False, pretty_print: bool = True
+        self,
+        path: pathlib.Path,
+        *,
+        git_object: GitObject = GitObject.BLOB,
+        write: bool = False,
+        pretty_print: bool = True,
     ):
         with path.open("r") as f:
-            hash_value = self.create_blob(f.read(), write=write)
+            match git_object:
+                case GitObject.BLOB:
+                    hash_value = self.create_blob(f.read(), write=write)
+                case GitObject.TREE:
+                    hash_value = self.create_tree(path, write=write)
         if pretty_print:
             sys.stdout.write(hash_value)
         return hash_value
 
-    def write_tree(self, directory=".") -> str:
+    def create_tree(
+        self, working_directory: PathLike = ".", *, write: bool = True
+    ) -> str:
         entries = []
-        dir_path = pathlib.Path(directory)
+        dir_path = pathlib.Path(working_directory)
 
         for entry in sorted(dir_path.iterdir()):
             if entry.name.startswith(".git"):
                 continue
 
             if entry.is_file():
-                mode = "100644"  # Regular file mode
-                hash_value = self.hash_object(entry, write=True, pretty_print=False)
+                mode = GitObject.BLOB.mode  # Regular file mode
+                hash_value = self.hash_object(
+                    entry, git_object=GitObject.BLOB, write=True, pretty_print=False
+                )
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
                 entries.append(
                     f"{mode} blob {entry.name}".encode() + b"\0" + hash_binary
                 )
             elif entry.is_dir():
-                mode = "040000"  # Directory mode
-                hash_value = self.write_tree(entry)
+                mode = GitObject.TREE.mode  # Directory mode
+                hash_value = self.create_tree(entry, write=write)
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
                 entries.append(
@@ -112,7 +140,8 @@ class Git:
 
         # Hash and store the tree object
         tree_hash = self.create_hash(tree_store)
-        self.save_file(tree_hash, tree_store)
+        if write:
+            self.save_file(tree_hash, tree_store)
         return tree_hash
 
     def ls_tree(self, hash_value: str, *, name_only: bool = False):

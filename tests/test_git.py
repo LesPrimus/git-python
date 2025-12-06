@@ -64,7 +64,10 @@ class TestGit:
         file2 = child_dir / "file2.txt"
         file2.write_text("World")
         #
-        hash_values = git.write_tree()
+        hash_values = git.create_tree()
 
         git.ls_tree(hash_values, name_only=True)
+
+        for entry in pathlib.Path(".git/objects").iterdir():
+            print(entry)
         assert 0
