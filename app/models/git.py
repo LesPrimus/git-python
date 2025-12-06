@@ -1,6 +1,7 @@
 import binascii
 import hashlib
 import pathlib
+import re
 import sys
 import zlib
 from enum import StrEnum, auto
@@ -8,7 +9,7 @@ from enum import StrEnum, auto
 __all__ = ["Git"]
 
 from os import PathLike
-
+from typing import Iterator
 
 NULL_BYTE = b"\x00"
 
@@ -139,6 +140,21 @@ class Git:
             self.save_file(tree_hash, tree_store)
         return tree_hash
 
+    @staticmethod
+    def _parse_tree_content(content: bytes) -> Iterator[dict[str, bytes]]:
+        pattern = re.compile(
+            rb"""
+                    (?P<mode>\d+)
+                    \s
+                    (?P<file_name>[^\x00]+)
+                    \x00
+                    (?P<raw_hash>.{20})
+                    """,
+            re.VERBOSE,
+        )
+        for match in pattern.finditer(content):
+            yield match.groupdict()
+
     def ls_tree(self, hash_value: str, *, name_only: bool = False):
         object_path = self.objects_folder / hash_value[:2] / hash_value[2:]
         with object_path.open("rb") as f:
@@ -149,28 +165,8 @@ class Git:
         if not header.startswith(b"tree "):
             raise ValueError(f"Not a tree object: {header}")
         # 3. Parse entries
-        entries = []
-        pos = 0
-        while pos < len(content):
-            # Find the null byte that separates entry info from hash
-            null_pos = content.index(b"\0", pos)
-
-            # Parse entry text (contains mode, type, and name)
-            entry_text = content[pos:null_pos].decode()
-            mode, name = entry_text.split(" ")
-
-            # Extract 20-byte hash and convert to hex
-            hash_start = null_pos + 1
-            hash_end = hash_start + 20  # SHA-1 hash is 20 bytes
-            hash_bytes = content[hash_start:hash_end]
-            hash_hex = binascii.hexlify(hash_bytes).decode()
-
-            # Add entry to list
-            entries.append({"mode": mode, "name": name, "hash": hash_hex})
-
-            # Move to next entry
-            pos = hash_end
+        entries = list(self._parse_tree_content(content))
         if name_only:
             for entry in entries:
-                print(entry["name"])
+                print(entry["file_name"].decode())
         return entries
