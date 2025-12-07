@@ -9,6 +9,8 @@ from enum import StrEnum, auto
 
 __all__ = ["Git"]
 
+from operator import attrgetter
+
 from os import PathLike
 from typing import Iterator
 
@@ -178,13 +180,17 @@ class Git:
         with object_path.open("rb") as f:
             data = zlib.decompress(f.read())
 
-        # 2. Split header from content
+        # Split header from content
         header, _, content = data.partition(b"\0")
         if not header.startswith(b"tree "):
             raise ValueError(f"Not a tree object: {header}")
-        # 3. Parse entries
+
+        # Parse entries
         entries = list(self._parse_tree_content(content))
         if name_only:
+            # Sort entries by filename before printing
+            entries.sort(key=attrgetter("file_name"))
             for entry in entries:
-                print(entry.file_name.decode())
+                # Add newline after each filename
+                print(entry.file_name.decode() + "\n", end="")
         return entries
