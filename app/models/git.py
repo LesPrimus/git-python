@@ -4,6 +4,7 @@ import pathlib
 import re
 import sys
 import zlib
+from dataclasses import dataclass
 from enum import StrEnum, auto
 
 __all__ = ["Git"]
@@ -27,6 +28,17 @@ class GitObject(StrEnum):
                 return "040000"
             case _:
                 raise ValueError(f"Invalid GitObject: {self}")
+
+
+@dataclass(frozen=True, kw_only=True)
+class TreeEntry:
+    mode: bytes
+    file_name: bytes
+    raw_hash: bytes
+
+    @property
+    def hash(self):
+        return binascii.hexlify(self.raw_hash).decode()
 
 
 class Git:
@@ -141,7 +153,7 @@ class Git:
         return tree_hash
 
     @staticmethod
-    def _parse_tree_content(content: bytes) -> Iterator[dict[str, bytes]]:
+    def _parse_tree_content(content: bytes) -> Iterator[TreeEntry]:
         pattern = re.compile(
             rb"""
                     (?P<mode>\d+)
@@ -153,7 +165,7 @@ class Git:
             re.VERBOSE,
         )
         for match in pattern.finditer(content):
-            yield match.groupdict()
+            yield TreeEntry(**match.groupdict())
 
     def ls_tree(self, hash_value: str, *, name_only: bool = False):
         object_path = self.objects_folder / hash_value[:2] / hash_value[2:]
@@ -168,5 +180,5 @@ class Git:
         entries = list(self._parse_tree_content(content))
         if name_only:
             for entry in entries:
-                print(entry["file_name"].decode())
+                print(entry.file_name.decode())
         return entries

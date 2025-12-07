@@ -7,8 +7,3 @@ __all__ = ["Blob"]
 class Blob:
     header: bytes
     body: bytes
-
-
-@dataclass(frozen=True, kw_only=True)
-class Tree:
-    entries: list[Blob]
