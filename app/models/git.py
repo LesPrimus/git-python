@@ -25,7 +25,7 @@ class GitObject(StrEnum):
             case GitObject.BLOB:
                 return "100644"
             case GitObject.TREE:
-                return "040000"
+                return "40000"
             case _:
                 raise ValueError(f"Invalid GitObject: {self}")
 
@@ -117,7 +117,11 @@ class Git:
         return hash_value
 
     def create_tree(
-        self, working_directory: PathLike = ".", *, write: bool = True
+        self,
+        working_directory: PathLike = ".",
+        *,
+        write: bool = True,
+        pretty_print: bool = True,
     ) -> str:
         entries = []
         dir_path = pathlib.Path(working_directory)
@@ -136,7 +140,7 @@ class Git:
                 entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
             elif entry.is_dir():
                 mode = GitObject.TREE.mode  # Directory mode
-                hash_value = self.create_tree(entry, write=write)
+                hash_value = self.create_tree(entry, write=write, pretty_print=False)
                 # Convert hex string to binary
                 hash_binary = binascii.unhexlify(hash_value)
                 entries.append(f"{mode} {entry.name}".encode() + b"\0" + hash_binary)
@@ -150,6 +154,8 @@ class Git:
         tree_hash = self.create_hash(tree_store)
         if write:
             self.save_file(tree_hash, tree_store)
+        if pretty_print:
+            sys.stdout.write(tree_hash)
         return tree_hash
 
     @staticmethod

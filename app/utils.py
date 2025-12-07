@@ -30,6 +30,9 @@ def get_parser():
     ls_tree_parser.add_argument("--name-only", action="store_true")
     ls_tree_parser.add_argument("hash_value")
 
+    # write-tree
+    _write_tree_parser = subparsers.add_parser("write-tree")
+
     return parser
 
 

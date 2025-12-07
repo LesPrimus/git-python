@@ -42,6 +42,7 @@ from app.main import get_parser
             ],
             Namespace(command="ls-tree", name_only=True, hash_value="some_hash"),
         ),
+        (["write-tree"], Namespace(command="write-tree")),
     ],
 )
 def test_parser(params, expected):

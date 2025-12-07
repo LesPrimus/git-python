@@ -15,6 +15,8 @@ def main():
             return git.hash_object(args.path, write=args.write)
         case "ls-tree":
             return git.ls_tree(args.hash_value, name_only=args.name_only)
+        case "write-tree":
+            return git.create_tree()
         case _:
             raise RuntimeError(f"Unknown command #{args.command}")
 

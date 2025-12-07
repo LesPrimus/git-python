@@ -98,7 +98,7 @@ class TestGit:
         assert expected_path.exists() == write
         assert capsys.readouterr().out == hash_value
 
-    def test_write_tree(self, create_git_tree):
+    def test_read_tree(self, create_git_tree):
         git = Git()
         entries = git.ls_tree(create_git_tree)
 
