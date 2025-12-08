@@ -33,6 +33,12 @@ def get_parser():
     # write-tree
     _write_tree_parser = subparsers.add_parser("write-tree")
 
+    # commit_tree
+    commit_tree_parser = subparsers.add_parser("commit-tree")
+    commit_tree_parser.add_argument("tree_hash")
+    commit_tree_parser.add_argument("-m", "--message", default="Initial commit")
+    commit_tree_parser.add_argument("-p", "--parent", default="")
+
     return parser
 
 

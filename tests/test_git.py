@@ -143,5 +143,11 @@ class TestGit:
 
     def test_git_commit_tree(self, create_git_tree):
         git = Git()
-        hash_value = git.commit_tree(create_git_tree, "Test commit")
-        assert len(hash_value) == 40
+        hash_value = git.commit_tree(create_git_tree, "Test commit", pretty_print=False)
+        cmd = ["git", "show", hash_value]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        assert result.returncode == 0
+        stdout = result.stdout.strip()
+        assert stdout.startswith("commit ")
+        assert "Test commit" in stdout
+        assert "author@email.com" in stdout

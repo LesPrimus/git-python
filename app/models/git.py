@@ -213,6 +213,7 @@ class Git:
         if timestamp is None:
             timestamp = int(time.time())
 
+        # Build the commit content
         lines = [
             f"tree {tree_hash}",
         ]
@@ -224,8 +225,15 @@ class Git:
         lines.append("")
         lines.append(message)
         commit_content = "\n".join(lines).encode() + b"\n"
-        hash_value = self.create_hash(commit_content)
-        self.save_file(hash_value, commit_content)
+
+        # Create the commit object with proper header
+        header = f"commit {len(commit_content)}".encode()
+        commit_object = header + NULL_BYTE + commit_content
+
+        # Hash and save
+        hash_value = self.create_hash(commit_object)
+        self.save_file(hash_value, commit_object)
+
         if pretty_print:
             sys.stdout.write(hash_value)
         return hash_value

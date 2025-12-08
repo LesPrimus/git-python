@@ -43,6 +43,24 @@ from app.main import get_parser
             Namespace(command="ls-tree", name_only=True, hash_value="some_hash"),
         ),
         (["write-tree"], Namespace(command="write-tree")),
+        (
+            ["commit-tree", "some_hash", "-m", "Some commit message"],
+            Namespace(
+                command="commit-tree",
+                tree_hash="some_hash",
+                message="Some commit message",
+                parent="",
+            ),
+        ),
+        (
+            ["commit-tree", "some_hash", "-p", "some_parent_hash"],
+            Namespace(
+                command="commit-tree",
+                tree_hash="some_hash",
+                message="Initial commit",
+                parent="some_parent_hash",
+            ),
+        ),
     ],
 )
 def test_parser(params, expected):
