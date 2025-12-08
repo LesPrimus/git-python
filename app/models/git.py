@@ -20,6 +20,7 @@ NULL_BYTE = b"\x00"
 class GitObject(StrEnum):
     BLOB = auto()
     TREE = auto()
+    COMMIT = auto()
 
     @property
     def mode(self):
@@ -194,3 +195,37 @@ class Git:
                 # Add newline after each filename
                 print(entry.file_name.decode() + "\n", end="")
         return entries
+
+    def commit_tree(
+        self,
+        tree_hash: str,
+        message: str,
+        *,
+        parent: str = "",
+        author: str = "Author Name <author@email.com>",
+        committer: str = "Committer Name <committer@email.com>",
+        timestamp: int = None,
+        timezone: str = "-0500",
+        pretty_print: bool = True,
+    ):
+        import time
+
+        if timestamp is None:
+            timestamp = int(time.time())
+
+        lines = [
+            f"tree {tree_hash}",
+        ]
+        if parent:
+            lines.append(f"parent {parent}")
+
+        lines.append(f"author {author} {timestamp} {timezone}")
+        lines.append(f"committer {committer} {timestamp} {timezone}")
+        lines.append("")
+        lines.append(message)
+        commit_content = "\n".join(lines).encode() + b"\n"
+        hash_value = self.create_hash(commit_content)
+        self.save_file(hash_value, commit_content)
+        if pretty_print:
+            sys.stdout.write(hash_value)
+        return hash_value

@@ -140,3 +140,8 @@ class TestGit:
 
         assert git.cat_file(file1_entry.hash).body == b"hello"
         assert git.cat_file(file2_entry.hash).body == b"world"
+
+    def test_git_commit_tree(self, create_git_tree):
+        git = Git()
+        hash_value = git.commit_tree(create_git_tree, "Test commit")
+        assert len(hash_value) == 40
