@@ -1,0 +1,100 @@
+Git Clone Smart Protocol Implementation Steps
+================================================
+
+1. Protocol Discovery & Negotiation
+   - Make HTTP GET request to {url}/info/refs?service=git-upload-pack
+   - Parse response to verify smart protocol support (look for # service=git-upload-pack header)
+   - Extract available refs (branches, tags, HEAD) and their SHA-1 hashes
+   - Parse pkt-line format (4-byte hex length prefix + payload)
+
+2. Capability Negotiation
+   - Parse capabilities from first ref line (e.g., multi_ack thin-pack side-band ofs-delta)
+   - Decide which capabilities to use (common ones: thin-pack, side-band-64k, ofs-delta)
+
+3. Want/Have Exchange
+   - Send POST request to {url}/git-upload-pack with:
+     * want lines for objects you need (typically HEAD and branches)
+     * have lines for objects you already have (empty for initial clone)
+     * Capabilities you support
+     * Flush packet and done packet
+   - Format as pkt-lines
+
+4. Receive Packfile
+   - Parse server response (may use side-band protocol)
+   - Handle progress messages (side-band 2) and errors (side-band 3)
+   - Extract the actual packfile data (side-band 1)
+   - Continue until NAK or packfile received
+
+5. Packfile Processing
+   - Parse packfile header: signature (PACK), version (2 or 3), object count
+   - Iterate through packed objects:
+     * Read object type and size (variable-length encoding)
+     * Handle object types: commit, tree, blob, tag, OFS_DELTA, REF_DELTA
+     * Decompress zlib-compressed data
+     * Apply deltas to reconstruct full objects
+
+6. Delta Resolution
+   - For OFS_DELTA: apply delta using offset to base object
+   - For REF_DELTA: apply delta using SHA-1 reference to base object
+   - Implement delta patching algorithm (copy/insert instructions)
+
+7. Object Storage
+   - Save unpacked objects to .git/objects/XX/YY... (loose objects) OR
+   - Save packfile to .git/objects/pack/pack-{hash}.pack
+   - Generate pack index file .git/objects/pack/pack-{hash}.idx for quick lookups
+
+8. Update References
+   - Write refs to .git/refs/heads/{branch}, .git/refs/tags/{tag}
+   - Update .git/HEAD to point to default branch
+   - Create .git/packed-refs if using packed refs
+
+9. Checkout Working Directory
+   - Read HEAD to determine current branch
+   - Get commit object from branch ref
+   - Get tree object from commit
+   - Recursively extract tree entries and write files to working directory
+   - Set proper file permissions (executable bit from mode)
+
+10. Additional Features (Optional)
+    - Shallow clone support (--depth)
+    - Partial clone support (--filter)
+    - Progress reporting
+    - Connection pooling/retry logic
+    - Authentication (HTTP Basic, tokens)
+
+Key Technical Components
+========================
+
+Pkt-line Format:
+- 4-byte hex length (includes the 4 bytes) + payload
+- 0000 = flush packet
+- 0001 = delim packet (protocol v2)
+
+Packfile Structure:
+- Header: 'PACK' + 4-byte version + 4-byte object count
+- Objects: [type + size (variable) + zlib(data)]...
+- Trailer: 20-byte SHA-1 checksum
+
+Delta Instructions:
+- Copy: copy N bytes from base at offset X
+- Insert: insert N literal bytes
+
+Libraries to Use:
+- requests or urllib for HTTP
+- zlib for compression (already used)
+- struct for binary parsing
+- hashlib for SHA-1 (already used)
+
+Current Status
+==============
+Already Implemented:
+✓ Object storage format (compress, hash, save_file)
+✓ Object parsing (cat_file, _parse_tree_content)
+✓ Repository initialization
+
+Need to Implement:
+- Network layer (HTTP communication)
+- Packfile parsing
+- Delta resolution
+- Reference management for clone
+- Working directory checkout
