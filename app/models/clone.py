@@ -1,5 +1,4 @@
 import re
-from functools import cached_property
 from dataclasses import dataclass
 
 DEFAULT_URL = "https://github.com/octocat/Hello-World"
@@ -53,25 +52,62 @@ class RefParser:
 
 
 class GitClone:
-    def __init__(self, repo_url: str, http_client: httpx.Client = httpx.Client()):
+    def __init__(self, repo_url: str, http_client: httpx.Client = None):
         self.repo_url = str(repo_url)
-        self.http_client = http_client
-        self.capabilities = []
-        self.refs = {}
-        self.parse_refs()
+        self.http_client = http_client or httpx.Client()
 
-    @cached_property
-    def get_refs(self):
+    def __enter__(self):
+        self.http_client.__enter__()
+        self.refs, self.capabilities = RefParser.parse_refs(self._fetch_refs())
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.http_client.__exit__(exc_type, exc_val, exc_tb)
+
+    def _fetch_refs(self):
         discover_url = f"{self.repo_url}/info/refs?service=git-upload-pack"
-        with self.http_client as client:
-            response = client.get(discover_url)
-            response.raise_for_status()
+        response = self.http_client.get(discover_url)
+        response.raise_for_status()
         return response.text.splitlines()
 
-    def parse_refs(self):
-        print(RefParser.parse_refs(self.get_refs))
+    @staticmethod
+    def format_pkt_line(payload: str | bytes) -> bytes:
+        if isinstance(payload, str):
+            payload = payload.encode()
+
+        # Length includes the 4-byte prefix itself
+        length = len(payload) + 4
+        # Format as 4-byte hex (lowercase)
+        hex_length = f"{length:04x}"
+        return hex_length.encode() + payload
+
+    def send_want_request(self):
+        caps = " ".join(self.capabilities) if self.capabilities else ""
+
+        body_parts = [
+            self.format_pkt_line(f"want {self.refs['HEAD'].sha1} {caps}\n"),
+            b"0000",
+            self.format_pkt_line("done\n"),
+        ]
+
+        # Combine all parts
+        request_body = b"".join(body_parts)
+
+        # Send POST request
+        upload_pack_url = f"{self.repo_url}/git-upload-pack"
+        headers = {
+            "Content-Type": "application/x-git-upload-pack-request",
+        }
+
+        response = self.http_client.post(
+            upload_pack_url,
+            content=request_body,
+            headers=headers,
+        )
+        print(response.content)
+        return response
 
 
 if __name__ == "__main__":
-    clone = GitClone(DEFAULT_URL)
-    clone.parse_refs()
+    with GitClone(DEFAULT_URL) as clone:
+        clone.send_want_request()
