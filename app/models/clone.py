@@ -4,10 +4,9 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 DEFAULT_URL = "https://github.com/octocat/Hello-World"
-
-import httpx
 
 REGEX = re.compile(
     r"""
@@ -156,23 +155,20 @@ class RefParser:
 
 
 class GitClone:
-    def __init__(self, repo_url: str, http_client: httpx.Client = None):
+    def __init__(self, repo_url: str):
         self.repo_url = str(repo_url)
-        self.http_client = http_client or httpx.Client()
 
     def __enter__(self):
-        self.http_client.__enter__()
         self.refs, self.capabilities = RefParser.parse_refs(self._fetch_refs())
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.http_client.__exit__(exc_type, exc_val, exc_tb)
+        pass
 
     def _fetch_refs(self):
         discover_url = f"{self.repo_url}/info/refs?service=git-upload-pack"
-        response = self.http_client.get(discover_url)
-        response.raise_for_status()
-        return response.text.splitlines()
+        with urlopen(discover_url) as response:
+            return response.read().decode().splitlines()
 
     @staticmethod
     def format_pkt_line(payload: str | bytes) -> bytes:
@@ -197,19 +193,19 @@ class GitClone:
 
         # Send POST request
         upload_pack_url = f"{self.repo_url}/git-upload-pack"
-        headers = {
-            "Content-Type": "application/x-git-upload-pack-request",
-        }
-
-        response = self.http_client.post(
+        request = Request(
             upload_pack_url,
-            content=request_body,
-            headers=headers,
+            data=request_body,
+            headers={"Content-Type": "application/x-git-upload-pack-request"},
+            method="POST",
         )
-        data = response.content
+
+        with urlopen(request) as response:
+            data = response.read()
+
         if data.startswith(b"0008NAK\n"):
             return data[8:]
-        return response.content
+        return data
 
     def parse_pack_header(self, data: bytes) -> PackHeader:
         """Parse pack file header, return (version, num_objects)."""
