@@ -322,9 +322,68 @@ class GitClone:
             stored[sha1] = obj
         return stored
 
+    @staticmethod
+    def parse_commit(data: bytes) -> dict:
+        """Parse commit object, return dict with tree, parent(s), author, etc."""
+        text = data.decode()
+        result = {"parents": []}
+        lines = text.split("\n")
+        for line in lines:
+            if line.startswith("tree "):
+                result["tree"] = line[5:]
+            elif line.startswith("parent "):
+                result["parents"].append(line[7:])
+            elif line.startswith("author "):
+                result["author"] = line[7:]
+            elif line.startswith("committer "):
+                result["committer"] = line[10:]
+            elif line == "":
+                break
+        return result
+
+    @staticmethod
+    def parse_tree(data: bytes) -> list[tuple[str, str, str]]:
+        """Parse tree object, return list of (mode, name, sha1)."""
+        entries = []
+        offset = 0
+        while offset < len(data):
+            # Find space after mode
+            space_idx = data.index(b" ", offset)
+            mode = data[offset:space_idx].decode()
+
+            # Find null after name
+            null_idx = data.index(b"\x00", space_idx)
+            name = data[space_idx + 1:null_idx].decode()
+
+            # Read 20-byte SHA
+            sha1 = data[null_idx + 1:null_idx + 21].hex()
+            offset = null_idx + 21
+
+            entries.append((mode, name, sha1))
+        return entries
+
+    def checkout(self, tree_sha: str, objects: dict[str, PackObject], dest: Path):
+        """Checkout tree to destination directory."""
+        tree_obj = objects[tree_sha]
+        entries = self.parse_tree(tree_obj.data)
+
+        for mode, name, sha1 in entries:
+            obj = objects[sha1]
+            path = dest / name
+
+            if obj.type == OBJ_BLOB:
+                path.write_bytes(obj.data)
+                # Set executable if mode is 100755
+                if mode == "100755":
+                    path.chmod(0o755)
+            elif obj.type == OBJ_TREE:
+                path.mkdir(exist_ok=True)
+                self.checkout(sha1, objects, path)
+
 
 if __name__ == "__main__":
-    git_dir = Path("/tmp/test-clone/.git")
+    work_dir = Path("/tmp/test-clone")
+    git_dir = work_dir / ".git"
     git_dir.mkdir(parents=True, exist_ok=True)
 
     with GitClone(DEFAULT_URL) as clone:
@@ -333,6 +392,16 @@ if __name__ == "__main__":
         objects = clone.parse_pack_objects(pack_data, pack_header.num_objects)
         stored = clone.store_objects(objects, git_dir)
 
-    print(f"Stored {len(stored)} objects:")
-    for sha1, obj in stored.items():
-        print(f"  {sha1} {TYPE_NAMES[obj.type]}")
+        # Find HEAD commit and checkout
+        head_sha = clone.refs["HEAD"].sha1
+        commit_obj = stored[head_sha]
+        commit_info = clone.parse_commit(commit_obj.data)
+        tree_sha = commit_info["tree"]
+
+        clone.checkout(tree_sha, stored, work_dir)
+
+    print(f"Cloned to {work_dir}")
+    print(f"Files:")
+    for f in work_dir.iterdir():
+        if f.name != ".git":
+            print(f"  {f.name}")
