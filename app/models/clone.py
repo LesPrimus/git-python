@@ -3,8 +3,7 @@ import re
 import struct
 import zlib
 from dataclasses import dataclass
-from functools import cache
-from pprint import pprint
+from pathlib import Path
 
 DEFAULT_URL = "https://github.com/octocat/Hello-World"
 
@@ -297,10 +296,43 @@ class GitClone:
 
         return objects
 
+    @staticmethod
+    def store_object(obj: PackObject, git_dir: Path) -> str:
+        """Store a single object to .git/objects as loose object. Returns SHA-1."""
+        type_name = TYPE_NAMES[obj.type]
+        header = f"{type_name} {len(obj.data)}\x00".encode()
+        store_data = header + obj.data
+
+        sha1 = hashlib.sha1(store_data).hexdigest()
+        obj_dir = git_dir / "objects" / sha1[:2]
+        obj_path = obj_dir / sha1[2:]
+
+        if not obj_path.exists():
+            obj_dir.mkdir(parents=True, exist_ok=True)
+            compressed = zlib.compress(store_data)
+            obj_path.write_bytes(compressed)
+
+        return sha1
+
+    def store_objects(self, objects: list[PackObject], git_dir: Path) -> dict[str, PackObject]:
+        """Store all objects to .git/objects. Returns dict of sha1 -> object."""
+        stored = {}
+        for obj in objects:
+            sha1 = self.store_object(obj, git_dir)
+            stored[sha1] = obj
+        return stored
+
 
 if __name__ == "__main__":
+    git_dir = Path("/tmp/test-clone/.git")
+    git_dir.mkdir(parents=True, exist_ok=True)
+
     with GitClone(DEFAULT_URL) as clone:
         pack_data = clone.send_want_request()
-    pack_header = clone.parse_pack_header(pack_data)
-    objects = clone.parse_pack_objects(pack_data, pack_header.num_objects)
-    pprint(objects)
+        pack_header = clone.parse_pack_header(pack_data)
+        objects = clone.parse_pack_objects(pack_data, pack_header.num_objects)
+        stored = clone.store_objects(objects, git_dir)
+
+    print(f"Stored {len(stored)} objects:")
+    for sha1, obj in stored.items():
+        print(f"  {sha1} {TYPE_NAMES[obj.type]}")
