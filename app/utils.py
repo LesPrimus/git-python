@@ -39,6 +39,11 @@ def get_parser():
     commit_tree_parser.add_argument("-m", "--message", default="Initial commit")
     commit_tree_parser.add_argument("-p", "--parent", default="")
 
+    # clone
+    clone_parser = subparsers.add_parser("clone")
+    clone_parser.add_argument("url")
+    clone_parser.add_argument("work_dir", type=pathlib.Path)
+
     return parser
 
 
