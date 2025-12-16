@@ -14,6 +14,8 @@ from operator import attrgetter
 from os import PathLike
 from typing import Iterator
 
+from app.models.clone import GitClone
+
 NULL_BYTE = b"\x00"
 
 
@@ -237,3 +239,31 @@ class Git:
         if pretty_print:
             sys.stdout.write(hash_value)
         return hash_value
+
+    def clone(self, url: str, working_directory: PathLike = "."):
+        work_dir = pathlib.Path(working_directory)
+        git_dir = work_dir / ".git"
+
+        # Initialize .git directory structure
+        git_dir.mkdir(parents=True, exist_ok=True)
+        (git_dir / "objects").mkdir(exist_ok=True)
+        (git_dir / "refs").mkdir(exist_ok=True)
+        (git_dir / "refs" / "heads").mkdir(exist_ok=True)
+
+        with GitClone(url) as clone:
+            pack_data = clone.send_want_request()
+            pack_header = clone.parse_pack_header(pack_data)
+            objects = clone.parse_pack_objects(pack_data, pack_header.num_objects)
+            stored = clone.store_objects(objects, git_dir)
+
+            # Find HEAD commit and checkout
+            head_sha = clone.refs["HEAD"].sha1
+            commit_obj = stored[head_sha]
+            commit_info = clone.parse_commit(commit_obj.data)
+            tree_sha = commit_info["tree"]
+
+            clone.checkout(tree_sha, stored, work_dir)
+
+            # Write refs/heads/main and HEAD
+            (git_dir / "refs" / "heads" / "main").write_text(f"{head_sha}\n")
+            (git_dir / "HEAD").write_text("ref: refs/heads/main\n")

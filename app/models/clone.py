@@ -203,9 +203,57 @@ class GitClone:
         with urlopen(request) as response:
             data = response.read()
 
-        if data.startswith(b"0008NAK\n"):
-            return data[8:]
-        return data
+        return self._extract_pack_data(data)
+
+    @staticmethod
+    def _extract_pack_data(data: bytes) -> bytes:
+        """Extract pack data from sideband-encoded response."""
+        offset = 0
+        pack_data = b""
+
+        while offset < len(data):
+            # Read 4-byte hex length
+            pkt_len_hex = data[offset:offset + 4]
+            if len(pkt_len_hex) < 4:
+                break
+
+            # Check if this looks like a hex length or raw PACK data
+            try:
+                pkt_len = int(pkt_len_hex, 16)
+            except ValueError:
+                # Not hex - might be raw PACK data (no sideband)
+                if data[offset:offset + 4] == b"PACK":
+                    return data[offset:]
+                break
+
+            if pkt_len == 0:  # flush packet
+                offset += 4
+                break  # end of response
+
+            # Get packet content (excluding length prefix)
+            pkt_content = data[offset + 4:offset + pkt_len]
+            offset += pkt_len
+
+            # Check for NAK/ACK lines
+            if pkt_content.startswith(b"NAK"):
+                continue
+            if pkt_content.startswith(b"ACK"):
+                continue
+
+            # Check for sideband channel byte
+            if len(pkt_content) > 0:
+                channel = pkt_content[0]
+                if channel == 1:  # pack data channel
+                    pack_data += pkt_content[1:]
+                elif channel == 2:  # progress channel
+                    continue
+                elif channel == 3:  # error channel
+                    raise RuntimeError(f"Server error: {pkt_content[1:].decode()}")
+                elif pkt_content.startswith(b"PACK"):
+                    # No sideband, raw pack data starting in this packet
+                    return pkt_content
+
+        return pack_data
 
     def parse_pack_header(self, data: bytes) -> PackHeader:
         """Parse pack file header, return (version, num_objects)."""
@@ -375,29 +423,3 @@ class GitClone:
             elif obj.type == OBJ_TREE:
                 path.mkdir(exist_ok=True)
                 self.checkout(sha1, objects, path)
-
-
-if __name__ == "__main__":
-    work_dir = Path("/tmp/test-clone")
-    git_dir = work_dir / ".git"
-    git_dir.mkdir(parents=True, exist_ok=True)
-
-    with GitClone(DEFAULT_URL) as clone:
-        pack_data = clone.send_want_request()
-        pack_header = clone.parse_pack_header(pack_data)
-        objects = clone.parse_pack_objects(pack_data, pack_header.num_objects)
-        stored = clone.store_objects(objects, git_dir)
-
-        # Find HEAD commit and checkout
-        head_sha = clone.refs["HEAD"].sha1
-        commit_obj = stored[head_sha]
-        commit_info = clone.parse_commit(commit_obj.data)
-        tree_sha = commit_info["tree"]
-
-        clone.checkout(tree_sha, stored, work_dir)
-
-    print(f"Cloned to {work_dir}")
-    print(f"Files:")
-    for f in work_dir.iterdir():
-        if f.name != ".git":
-            print(f"  {f.name}")
